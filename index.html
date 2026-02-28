@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Jarvis AI</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+body {
+    background: #000;
+    color: #00ffff;
+    font-family: Arial, sans-serif;
+    text-align: center;
+    padding: 20px;
+}
+button {
+    padding: 15px;
+    margin: 10px;
+    font-size: 18px;
+    background: #00ffff;
+    border: none;
+    border-radius: 8px;
+}
+#output {
+    margin-top: 20px;
+    min-height: 100px;
+}
+.loader {
+    border: 4px solid #111;
+    border-top: 4px solid cyan;
+    border-radius: 50%;
+    width: 25px;
+    height: 25px;
+    animation: spin 1s linear infinite;
+    margin: 10px auto;
+}
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+</style>
+</head>
+<body>
+
+<h1>JARVIS</h1>
+<button onclick="startListening()">🎙 Talk</button>
+<button onclick="clearMemory()">🧠 Clear Memory</button>
+
+<div id="output"></div>
+<div id="loading"></div>
+
+<script>
+const apiKey = "PASTE_YOUR_OPENAI_KEY_HERE";
+
+let recognition;
+
+function speak(text) {
+    window.speechSynthesis.cancel();
+    const speech = new SpeechSynthesisUtterance(text);
+    speech.rate = 1;
+    speech.pitch = 0.9;
+    speech.lang = "en-US";
+    window.speechSynthesis.speak(speech);
+}
+
+function startListening() {
+    recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+    recognition.lang = "en-US";
+    recognition.start();
+
+    recognition.onresult = async function(event) {
+        const transcript = event.results[0][0].transcript;
+        document.getElementById("output").innerHTML = "You: " + transcript;
+        askJarvis(transcript);
+    };
+
+    recognition.onerror = function() {
+        document.getElementById("output").innerHTML = "Mic error. Try Chrome browser.";
+    };
+}
+
+function clearMemory() {
+    localStorage.removeItem("jarvisMemory");
+    document.getElementById("output").innerHTML = "Memory Cleared.";
+}
+
+async function askJarvis(prompt) {
+
+    document.getElementById("loading").innerHTML = '<div class="loader"></div>';
+
+    let memory = JSON.parse(localStorage.getItem("jarvisMemory")) || [];
+
+    memory.push({ role: "user", content: prompt });
+
+    // Limit memory to last 10 messages (prevents slowdowns)
+    if (memory.length > 10) {
+        memory = memory.slice(-10);
+    }
+
+    try {
+        const response = await fetch("https://api.openai.com/v1/chat/completions", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": "Bearer " + apiKey
+            },
+            body: JSON.stringify({
+                model: "gpt-4.1-mini",
+                temperature: 0.7,
+                messages: [
+                    { 
+                        role: "system", 
+                        content: "You are Jarvis, a fast, intelligent AI assistant. If the user asks about recent events or real-time info, respond clearly that live browsing requires an upgrade but give best possible updated answer."
+                    },
+                    ...memory
+                ]
+            })
+        });
+
+        const data = await response.json();
+
+        if (!data.choices) {
+            throw new Error("API Error");
+        }
+
+        const reply = data.choices[0].message.content;
+
+        memory.push({ role: "assistant", content: reply });
+        localStorage.setItem("jarvisMemory", JSON.stringify(memory));
+
+        document.getElementById("output").innerHTML += "<br><br>Jarvis: " + reply;
+        document.getElementById("loading").innerHTML = "";
+
+        speak(reply);
+
+    } catch (error) {
+        document.getElementById("loading").innerHTML = "";
+        document.getElementById("output").innerHTML += "<br>Error connecting to AI.";
+    }
+}
+</script>
+
+</body>
+</html>
